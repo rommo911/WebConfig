@@ -156,7 +156,10 @@ void WebConfig::setDescription(String parameter, WebServer* server) {
   _count = 0;
   addDescription(parameter);
   if (server != nullptr)
+  {
     this->_server = server;
+    server->on("/", [&]() { this->handleRoot();});
+  }
 }
 bool WebConfig::handleRoot() {
   if (_server == nullptr)
@@ -220,10 +223,21 @@ void WebConfig::addDescription(String parameter) {
         if (isNVS)
         {
 #if defined(ESP32)
-          values[_count] = getStringNVS(_description[_count].name);
+          switch (_description[_count].type) {
+          case INPUTPASSWORD:
+          case INPUTSELECT:
+          case INPUTDATE:
+          case INPUTTIME:
+          case INPUTRADIO:
+          case INPUTCOLOR:
+          case INPUTTEXT:   values[_count] = getStringNVS(_description[_count].name); break;
+          case INPUTCHECKBOX:
+          case INPUTRANGE:
+          case INPUTNUMBER:  values[_count] = getIntNVS(_description[_count].name); break;
+          case INPUTFLOAT:  values[_count] = getfloatNVS(_description[_count].name); break;
+          }
           Serial.printf("laoded from NVS %s:%s\n\r", _description[_count].name, values[_count].c_str());
 #endif
-
         }
         else
         {
@@ -395,7 +409,12 @@ void WebConfig::handleFormRequest(ESP8266WebServer * server, const char* filenam
   boolean exit = false;
   if (server->hasArg(F("SAVE")) && _onSave) {
     _onSave(getResults());
-    exit = true;
+  }
+  if (server->hasArg(F("SAVE")) && _onSaveJson) {
+    _onSaveJson(getResultsJson());
+  }
+  if (server->hasArg(F("SAVE")) && _onSave_null) {
+    _onSave_null();
   }
   if (server->hasArg(F("DONE")) && _onDone) {
     _onDone(getResults());
@@ -588,7 +607,22 @@ boolean WebConfig::writeConfigNVS() {
       val = values[i];
       val.replace("\n", "~");
       //NOerrorOccured &=
-      size_t result = preferences.putString(_description[i].name, val);
+      size_t result;
+      switch (_description[i].type) {
+      case INPUTPASSWORD:
+      case INPUTSELECT:
+      case INPUTDATE:
+      case INPUTTIME:
+      case INPUTRADIO:
+      case INPUTCOLOR:
+      case INPUTTEXT: result = preferences.putString(_description[i].name, val); break;
+      case INPUTCHECKBOX:
+      case INPUTRANGE:
+      case INPUTNUMBER: result = preferences.putInt(_description[i].name, val.toInt()); break;
+      case INPUTFLOAT:  result = preferences.putInt(_description[i].name, val.toFloat()); break;
+      default: result = 0; break;
+
+      }
       Serial.printf("saving to nvs %s:%s ,returned %d \n\r", _description[i].name, val.c_str(), result);
       NOerrorOccured &= result > 0;
     }
@@ -651,6 +685,30 @@ const String WebConfig::getStringNVS(const char* name) {
   }
   return "";
 }
+
+int WebConfig::getIntNVS(const char* name) {
+  Preferences p;
+  if (p.begin(this->nameSpace.c_str()))
+  {
+    if (p.isKey(name))
+    {
+      return p.getInt(name);
+    }
+  }
+  return 0;
+}
+
+float WebConfig::getfloatNVS(const char* name) {
+  Preferences p;
+  if (p.begin(this->nameSpace.c_str()))
+  {
+    if (p.isKey(name))
+    {
+      return p.getFloat(name);
+    }
+  }
+  return 0;
+}
 #endif
 
 
@@ -671,11 +729,30 @@ String WebConfig::getResults() {
     case INPUTRANGE:
     case INPUTNUMBER: doc[_description[i].name] = values[i].toInt(); break;
     case INPUTFLOAT: doc[_description[i].name] = values[i].toFloat(); break;
-
     }
   }
   serializeJson(doc, buffer);
   return String(buffer);
+}
+
+JsonObject WebConfig::getResultsJson() {
+  JsonObject doc;
+  for (uint8_t i = 0; i < _count; i++) {
+    switch (_description[i].type) {
+    case INPUTPASSWORD:
+    case INPUTSELECT:
+    case INPUTDATE:
+    case INPUTTIME:
+    case INPUTRADIO:
+    case INPUTCOLOR:
+    case INPUTTEXT: doc[_description[i].name] = values[i]; break;
+    case INPUTCHECKBOX:
+    case INPUTRANGE:
+    case INPUTNUMBER: doc[_description[i].name] = values[i].toInt(); break;
+    case INPUTFLOAT: doc[_description[i].name] = values[i].toFloat(); break;
+    }
+  }
+  return doc;
 }
 
 //Ser values from a JSON string
@@ -762,20 +839,7 @@ boolean WebConfig::getBool(const char* name) {
 
     return (getString(name) != "0");
 }
-#if defined(ESP32)
 
-int WebConfig::getIntNVS(const char* name) {
-  return getStringNVS(name).toInt();
-}
-
-float WebConfig::getFloatNVS(const char* name) {
-  return getStringNVS(name).toFloat();
-}
-
-boolean WebConfig::getBoolNVS(const char* name) {
-  return (getStringNVS(name) != "0");
-}
-#endif
 //get the accesspoint name
 const char* WebConfig::getDeviceName() {
   return _deviceNAme.c_str();
@@ -874,8 +938,14 @@ void WebConfig::setButtons(uint8_t buttons) {
   _buttons = buttons;
 }
 //register onSave callback
-void WebConfig::registerOnSave(void (*callback)(String results)) {
+void WebConfig::registerOnSave(std::function<void(String)>callback) {
   _onSave = callback;
+}
+void WebConfig::registerOnSave(std::function<void(JsonObject)>callback) {
+  _onSaveJson = callback;
+}
+void WebConfig::registerOnSave(std::function<void()>callback) {
+  _onSave_null = callback;
 }
 //register onSave callback
 void WebConfig::registerOnDone(void (*callback)(String results)) {

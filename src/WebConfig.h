@@ -20,6 +20,8 @@ Dependencies:
 #define WebConfig_h
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
+
 #if defined(ESP32)
 #include <WebServer.h>
 #else
@@ -77,7 +79,7 @@ struct {
 } DESCRIPTION;
 
 class WebConfig {
-public:
+  public:
   WebConfig(boolean NVS = false, const char* NVSNamespace = "default");
   //load form descriptions
   void setDescription(String parameter, WebServer* server);
@@ -116,6 +118,8 @@ public:
   String getName(uint8_t index);
   //Get results as a JSON string
   String getResults();
+  //
+  JsonObject getResultsJson();
   //Ser values from a JSON string
   void setValues(String json);
   //set the value for a parameter
@@ -137,7 +141,9 @@ public:
   //set form type to doen cancel
   void setButtons(uint8_t buttons);
   //register onSave callback
-  void registerOnSave(void (*callback)(String results));
+  void registerOnSave(std::function<void(String)>);
+  void registerOnSave(std::function<void(JsonObject)>);
+  void registerOnSave(std::function<void()>callback);
   //register onSave callback
   void registerOnDone(void (*callback)(String results));
   //register onSave callback
@@ -147,7 +153,7 @@ public:
 
   //values for the parameter
   String values[MAXVALUES];
-private:
+  private:
   const boolean isNVS;
   char _buf[1000];
   WebServer* _server{ nullptr };
@@ -156,7 +162,9 @@ private:
   String nameSpace;
   uint8_t _buttons = BTN_CONFIG;
   DESCRIPTION _description[MAXVALUES];
-  void (*_onSave)(String results) = NULL;
+  std::function<void(String)> _onSave{ nullptr };
+  std::function<void()> _onSave_null{ nullptr };
+  std::function<void(JsonObject)> _onSaveJson{ nullptr };
   void (*_onDone)(String results) = NULL;
   void (*_onCancel)() = NULL;
   void (*_onDelete)(String name) = NULL;
@@ -171,8 +179,8 @@ private:
   //get the index for a value by parameter name
   const String getStringNVS(const char* name);
   int getIntNVS(const char* name);
-  float getFloatNVS(const char* name);
-  boolean getBoolNVS(const char* name);
+  float getfloatNVS(const char* name);
+
 #else
   void handleFormRequest(ESP8266WebServer* server, const char* filename);
   //function to respond a HTTP request for the form use the default file
