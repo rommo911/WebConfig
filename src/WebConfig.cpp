@@ -36,7 +36,7 @@ const char HTML_START[] PROGMEM =
 "<head>\n"
 "<meta http-equiv='Content-Type' content='text/html; charset=utf-8'>\n"
 "<meta name='viewport' content='width=320' />\n"
-"<title>Konfiguration</title>\n"
+"<title>ESP Config Portal</title>\n"
 "<style>\n"
 "body {\n"
 "  background-color: #d2f3eb;\n"
@@ -66,10 +66,12 @@ const char HTML_START[] PROGMEM =
 "</head>\n"
 "<body>\n"
 "<div id='main_div' style='margin-left:15px;margin-right:15px;'>\n"
-"<div class='titel'>Konfiguration %s</div>\n"
+"<div class='titel'>ESP Config Portal %s</div>\n"
 "<form method='post'>\n";
 
 //Template for one input field
+const char HTML_TEX_SIMPLE[] PROGMEM =
+"  <div class='zeile'><b>%s</b></div>\n";
 const char HTML_ENTRY_SIMPLE[] PROGMEM =
 "  <div class='zeile'><b>%s</b></div>\n"
 "  <div class='zeile'><input type='%s' value='%s' name='%s'></div>\n";
@@ -104,6 +106,21 @@ const char HTML_ENTRY_MULTI_END[] PROGMEM =
 " </fieldset></div>\n";
 
 //Template for save button and end of the form with save
+const char HTML_END_ERROR_SAVE[] PROGMEM =
+"  <div class='zeile'><b>ERROR IN SAVING</b></div>\n"
+"<div class='zeile'><button type='submit' name='SAVE'>Save</button>\n"
+"<button type='submit' name='RST'>Restart</button></div>\n"
+"</form>\n"
+"</div>\n"
+"</body>\n"
+"</html>\n";
+
+const char HTML_END_NOSAVE[] PROGMEM =
+"<button type='submit' name='RST'>Restart</button></div>\n"
+"</form>\n"
+"</div>\n"
+"</body>\n"
+"</html>\n";
 const char HTML_END[] PROGMEM =
 "<div class='zeile'><button type='submit' name='SAVE'>Save</button>\n"
 "<button type='submit' name='RST'>Restart</button></div>\n"
@@ -115,9 +132,24 @@ const char HTML_END[] PROGMEM =
 const char HTML_BUTTON[] PROGMEM =
 "<button type='submit' name='%s'>%s</button>\n";
 
+#define INPUTTEXT 0
+#define INPUTPASSWORD 1
+#define INPUTNUMBER 2
+#define INPUTDATE 3
+#define INPUTTIME 4
+#define INPUTRANGE 5
+#define INPUTCHECKBOX 6
+#define INPUTRADIO 7
+#define INPUTSELECT 8
+#define INPUTCOLOR 9
+#define INPUTFLOAT 10
+#define INPUTTEXTAREA 11
+#define INPUTMULTICHECK 12
+
+
 WebConfig::WebConfig(boolean NVS, const char* NVSNamespace) :isNVS(NVS), nameSpace(NVSNamespace)
 {
-  _apName = "";
+  _deviceNAme = "";
 };
 
 void WebConfig::setDescription(String parameter, WebServer* server) {
@@ -132,12 +164,13 @@ bool WebConfig::handleRoot() {
   this->handleFormRequest(_server);
   if (_server->hasArg("SAVE")) {
     uint8_t cnt = this->getCount();
-    Serial.println("*********** Konfiguration ************");
+    Serial.println("*********** Config recieved ************");
     for (uint8_t i = 0; i < cnt; i++) {
       Serial.print(this->getName(i));
       Serial.print(" = ");
       Serial.println(this->values[i]);
     }
+    Serial.println("*********** Config done ************");
     return true;
   }
   else
@@ -182,11 +215,15 @@ void WebConfig::addDescription(String parameter) {
         else {
           _description[_count].type = INPUTTEXT;
         }
-        _description[_count].max = (obj.containsKey("max")) ? obj["max"] : 100;
+        _description[_count].max = (obj.containsKey("max")) ? obj["max"] : 99999;
         _description[_count].min = (obj.containsKey("min")) ? obj["min"] : 0;
         if (isNVS)
         {
+#if defined(ESP32)
           values[_count] = getStringNVS(_description[_count].name);
+          Serial.printf("laoded from NVS %s:%s\n\r", _description[_count].name, values[_count].c_str());
+#endif
+
         }
         else
         {
@@ -214,8 +251,15 @@ void WebConfig::addDescription(String parameter) {
       _count++;
     }
   }
-  _apName = WiFi.macAddress();
-  _apName.replace(":", "");
+  if (isNVS)
+  {
+    _deviceNAme = getStringNVS("deviceName");
+  }
+  else
+  {
+    _deviceNAme = WiFi.macAddress();
+  }
+  //_deviceNAme.replace(":", "");
   if (!isNVS)
   {
     if (!LittleFS.begin()) {
@@ -308,11 +352,14 @@ void WebConfig::handleFormRequest(ESP8266WebServer * server) {
 void WebConfig::handleFormRequest(ESP8266WebServer * server, const char* filename) {
 #endif
   //******************** Rest of the function has no difference ***************
+  bool saved = false;
+  bool errorSaving = false;
+
   uint8_t a, v;
   String val;
   if (server->args() > 0) {
-    if (server->hasArg(F("apName")))
-      _apName = server->arg(F("apName"));
+    if (server->hasArg(F("deviceName")))
+      _deviceNAme = server->arg(F("deviceName"));
 
     for (uint8_t i = 0; i < _count; i++) {
       if (_description[i].type == INPUTCHECKBOX) {
@@ -335,14 +382,10 @@ void WebConfig::handleFormRequest(ESP8266WebServer * server, const char* filenam
       }
     }
     if (server->hasArg(F("SAVE")) || server->hasArg(F("RST"))) {
-      if (isNVS)
-      {
-        writeConfigNVS();
-      }
-      else
-      {
-        writeConfig(filename);
-      }
+
+      saved = writeConfig();
+      errorSaving = !saved;
+      Serial.println(saved);
       if (server->hasArg(F("RST")))
       {
         ESP.restart();
@@ -363,15 +406,15 @@ void WebConfig::handleFormRequest(ESP8266WebServer * server, const char* filenam
     exit = true;
   }
   if (server->hasArg(F("DELETE")) && _onDelete) {
-    _onDelete(_apName);
+    _onDelete(_deviceNAme);
     exit = true;
   }
   if (!exit) {
     server->setContentLength(CONTENT_LENGTH_UNKNOWN);
-    sprintf(_buf, HTML_START, _apName.c_str());
+    sprintf(_buf, HTML_START, _deviceNAme.c_str());
     server->send(200, "text/html", _buf);
     if (_buttons == BTN_CONFIG) {
-      createSimple(_buf, "apName", "Name des Accesspoints", "text", _apName);
+      createSimple(_buf, "deviceName", "device Name", "text", _deviceNAme);
       server->sendContent(_buf);
     }
 
@@ -424,8 +467,20 @@ void WebConfig::handleFormRequest(ESP8266WebServer * server, const char* filenam
       }
       server->sendContent(_buf);
     }
+    if (saved) {
+      sprintf(_buf, HTML_TEX_SIMPLE, "SAVED!");
+      server->sendContent(_buf);
+    }
     if (_buttons == BTN_CONFIG) {
-      server->sendContent(HTML_END);
+      if (saved && !errorSaving)
+        server->sendContent(HTML_END_NOSAVE);
+      else
+        if (!saved & errorSaving)
+        {
+          server->sendContent(HTML_END_ERROR_SAVE);
+        }
+        else
+          server->sendContent(HTML_END);
     }
     else {
       server->sendContent("<div class='zeile'>\n");
@@ -454,17 +509,17 @@ int16_t WebConfig::getIndex(const char* name) {
   return i;
 }
 //read configuration from file
-boolean WebConfig::readConfig(const char* filename) {
+boolean WebConfig::readConfig() {
   if (isNVS)
     return false;
   String line, name, value;
   uint8_t pos;
   int16_t index;
-  if (!LittleFS.exists(filename)) {
+  if (!LittleFS.exists(CONFFILE)) {
     //if configfile does not exist write default values
-    writeConfig(filename);
+    writeConfig(CONFFILE);
   }
-  File f = LittleFS.open(filename, "r");
+  File f = LittleFS.open(CONFFILE, "r");
   if (f) {
     Serial.println(F("Read configuration"));
     uint32_t size = f.size();
@@ -473,8 +528,8 @@ boolean WebConfig::readConfig(const char* filename) {
       pos = line.indexOf('=');
       name = line.substring(0, pos);
       value = line.substring(pos + 1);
-      if ((name == "apName") && (value != "")) {
-        _apName = value;
+      if ((name == "deviceName") && (value != "")) {
+        _deviceNAme = value;
         Serial.println(line);
       }
       else {
@@ -500,19 +555,14 @@ boolean WebConfig::readConfig(const char* filename) {
   }
 }
 
-
-//read configuration from default file
-boolean WebConfig::readConfig() {
-  if (!isNVS)
-    return readConfig(CONFFILE);
-  return false;
-}
 //write configuration to file
 boolean WebConfig::writeConfig(const char* filename) {
+  if (isNVS)
+    return false;
   String val;
   File f = LittleFS.open(filename, "w");
   if (f) {
-    f.printf("apName=%s\n", _apName.c_str());
+    f.printf("deviceName=%s\n", _deviceNAme.c_str());
     for (uint8_t i = 0; i < _count; i++) {
       val = values[i];
       val.replace("\n", "~");
@@ -526,38 +576,52 @@ boolean WebConfig::writeConfig(const char* filename) {
   }
 
 }
+#if defined(ESP32)
 boolean WebConfig::writeConfigNVS() {
   String val;
   Preferences preferences;
   boolean ret = preferences.begin(nameSpace.c_str(), false);
+  bool NOerrorOccured = true;
   if (ret) {
-    preferences.putString("apName", _apName.c_str());
+    preferences.putString("deviceName", _deviceNAme.c_str());
     for (uint8_t i = 0; i < _count; i++) {
       val = values[i];
       val.replace("\n", "~");
-      preferences.putString(_description[i].name, val);
+      //NOerrorOccured &=
+      size_t result = preferences.putString(_description[i].name, val);
+      Serial.printf("saving to nvs %s:%s ,returned %d \n\r", _description[i].name, val.c_str(), result);
+      NOerrorOccured &= result > 0;
     }
-    return true;
+    return NOerrorOccured;
   }
   else {
-    Serial.println(F("Cannot write configuration"));
+    Serial.println(F("Cannot write configuration to nvs "));
     return false;
   }
 }
+#endif
+
 //write configuration to default file
 boolean WebConfig::writeConfig() {
-  return writeConfig(CONFFILE);
+  if (isNVS)
+    return writeConfigNVS();
+  else
+    return writeConfig(CONFFILE);
 }
 //delete configuration file
 boolean WebConfig::deleteConfig(const char* filename) {
   return LittleFS.remove(filename);
 }
+
+#if defined(ESP32)
 boolean WebConfig::deleteConfigNVS() {
   Preferences preferences;
   if (preferences.begin(nameSpace.c_str(), false))
     return preferences.clear();
   return false;
 }
+#endif
+
 //delete default configutation file
 boolean WebConfig::deleteConfig() {
   return deleteConfig(CONFFILE);
@@ -575,7 +639,7 @@ const String WebConfig::getString(const char* name) {
   }
 }
 
-
+#if defined(ESP32)
 const String WebConfig::getStringNVS(const char* name) {
   Preferences p;
   if (p.begin(this->nameSpace.c_str()))
@@ -587,6 +651,8 @@ const String WebConfig::getStringNVS(const char* name) {
   }
   return "";
 }
+#endif
+
 
 //Get results as a JSON string
 String WebConfig::getResults() {
@@ -662,31 +728,41 @@ const char* WebConfig::getValue(const char* name) {
 }
 
 int WebConfig::getInt(const char* name) {
+#if defined(ESP32)
   if (isNVS)
   {
     return getStringNVS(name).toInt();
   }
   else
+#endif
     return getString(name).toInt();
 }
 
 float WebConfig::getFloat(const char* name) {
+#if defined(ESP32)
+
   if (isNVS)
   {
     return getStringNVS(name).toFloat();
   }
   else
+#endif
+
     return getString(name).toFloat();
 }
 
 boolean WebConfig::getBool(const char* name) {
+#if defined(ESP32)
   if (isNVS)
   {
     return getStringNVS(name) != "0";
   }
   else
+#endif
+
     return (getString(name) != "0");
 }
+#if defined(ESP32)
 
 int WebConfig::getIntNVS(const char* name) {
   return getStringNVS(name).toInt();
@@ -699,10 +775,10 @@ float WebConfig::getFloatNVS(const char* name) {
 boolean WebConfig::getBoolNVS(const char* name) {
   return (getStringNVS(name) != "0");
 }
-
+#endif
 //get the accesspoint name
-const char* WebConfig::getApName() {
-  return _apName.c_str();
+const char* WebConfig::getDeviceName() {
+  return _deviceNAme.c_str();
 }
 //get the number of parameters
 uint8_t WebConfig::getCount() {

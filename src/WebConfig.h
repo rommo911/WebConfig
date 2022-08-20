@@ -39,19 +39,23 @@ Dependencies:
 //name for the config file
 #define CONFFILE "/WebConf.conf"
 
-#define INPUTTEXT 0
-#define INPUTPASSWORD 1
-#define INPUTNUMBER 2
-#define INPUTDATE 3
-#define INPUTTIME 4
-#define INPUTRANGE 5
-#define INPUTCHECKBOX 6
-#define INPUTRADIO 7
-#define INPUTSELECT 8
-#define INPUTCOLOR 9
-#define INPUTFLOAT 10
-#define INPUTTEXTAREA 11
-#define INPUTMULTICHECK 12
+
+
+#define OPTION_INPUTTEXT "0"
+#define OPTION_INPUTPASSWORD "1"
+#define OPTION_INPUTNUMBER "2"
+#define OPTION_INPUTDATE "3"
+#define OPTION_INPUTTIME "4"
+#define OPTION_INPUTRANGE "5"
+#define OPTION_INPUTCHECKBOX "6"
+#define OPTION_INPUTRADIO "7"
+#define OPTION_INPUTSELECT "8"
+#define OPTION_INPUTCOLOR "9"
+#define OPTION_INPUTFLOAT "10"
+#define OPTION_INPUTTEXTAREA "11"
+#define OPTION_INPUTMULTICHECK "12"
+
+
 //number of types
 #define INPUTTYPES 13
 
@@ -83,17 +87,11 @@ public:
   //to save.
   bool handleRoot();
   int16_t getIndex(const char* name);
-  //read configuration from file
-  boolean readConfig(const char* filename);
   //read configuration from default file
   boolean readConfig();
-  //write configuration to file
-  boolean writeConfig(const char* filename);
-
   //write configuration to default file
   boolean writeConfig();
   //
-  boolean writeConfigNVS();
 
   //delete configuration file
   boolean deleteConfig(const char* filename);
@@ -109,12 +107,9 @@ public:
   float getFloat(const char* name);
   boolean getBool(const char* name);
   //
-  const String getStringNVS(const char* name);
-  int getIntNVS(const char* name);
-  float getFloatNVS(const char* name);
-  boolean getBoolNVS(const char* name);
+
   //get the accesspoint name
-  const char* getApName();
+  const char* getDeviceName();
   //get the number of parameters
   uint8_t getCount();
   //get the name of a parameter
@@ -157,7 +152,7 @@ private:
   char _buf[1000];
   WebServer* _server{ nullptr };
   uint8_t _count;
-  String _apName;
+  String _deviceNAme;
   String nameSpace;
   uint8_t _buttons = BTN_CONFIG;
   DESCRIPTION _description[MAXVALUES];
@@ -165,12 +160,19 @@ private:
   void (*_onDone)(String results) = NULL;
   void (*_onCancel)() = NULL;
   void (*_onDelete)(String name) = NULL;
+  boolean writeConfig(const char* filename);
+
 #if defined(ESP32)
+  boolean writeConfigNVS();
   void handleFormRequest(WebServer* server, const char* filename);
   //function to respond a HTTP request for the form use the default file
   //to save and restart ESP after saving the new config
   void handleFormRequest(WebServer* server);
   //get the index for a value by parameter name
+  const String getStringNVS(const char* name);
+  int getIntNVS(const char* name);
+  float getFloatNVS(const char* name);
+  boolean getBoolNVS(const char* name);
 #else
   void handleFormRequest(ESP8266WebServer* server, const char* filename);
   //function to respond a HTTP request for the form use the default file

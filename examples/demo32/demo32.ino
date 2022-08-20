@@ -1,77 +1,75 @@
 #include <WebServer.h>
 #include <ESPmDNS.h>
-
-
 #include <WebConfig.h>
 
 String params = "["
 "{"
 "'name':'ssid',"
 "'label':'Name des WLAN',"
-"'type':" + String(INPUTTEXT) + ","
+"'type':" OPTION_INPUTTEXT ","
 "'default':''"
 "},"
 "{"
 "'name':'pwd',"
 "'label':'WLAN Passwort',"
-"'type':" + String(INPUTPASSWORD) + ","
+"'type':" OPTION_INPUTPASSWORD ","
 "'default':''"
 "},"
 "{"
 "'name':'amount',"
 "'label':'Menge',"
-"'type':" + String(INPUTNUMBER) + ","
+"'type':" OPTION_INPUTNUMBER ","
 "'min':-10,'max':20,"
 "'default':'1'"
 "},"
 "{"
 "'name':'float',"
 "'label':'Fließkomma Zahl',"
-"'type':" + String(INPUTTEXT) + ","
+"'type':" OPTION_INPUTTEXT ","
 "'default':'1.00'"
 "},"
 "{"
 "'name':'area',"
 "'label':'Mehr Text',"
-"'type':" + String(INPUTTEXTAREA) + ","
+"'type':" OPTION_INPUTTEXTAREA ","
 "'default':'',"
 "'min':40,'max':5"  //min = columns max = rows
 "},"
 "{"
 "'name':'duration',"
 "'label':'Dauer(s)',"
-"'type':" + String(INPUTRANGE) + ","
+"'type':" OPTION_INPUTRANGE ","
 "'min':5,'max':30,"
 "'default':'10'"
 "},"
 "{"
 "'name':'date',"
 "'label':'Datum',"
-"'type':" + String(INPUTDATE) + ","
+"'type':" OPTION_INPUTDATE ","
 "'default':'2019-08-14'"
 "},"
 "{"
 "'name':'time',"
 "'label':'Zeit',"
-"'type':" + String(INPUTTIME) + ","
+"'type':" OPTION_INPUTTIME ","
 "'default':'18:30'"
 "},"
 "{"
 "'name':'col',"
 "'label':'Farbe',"
-"'type':" + String(INPUTCOLOR) + ","
+"'type':" OPTION_INPUTCOLOR ","
 "'default':'#ffffff'"
 "},"
 "{"
 "'name':'switch',"
 "'label':'Schalter',"
-"'type':" + String(INPUTCHECKBOX) + ","
+"'type':" OPTION_INPUTCHECKBOX ","
 "'default':'1'"
 "},"
 "{"
 "'name':'gender',"
 "'label':'Geschlecht',"
-"'type':" + String(INPUTRADIO) + ","
+"'type':" OPTION_INPUTRADIO ","
 "'options':["
 "{'v':'m','l':'männlich'},"
 "{'v':'w','l':'weiblich'},"
@@ -81,7 +79,7 @@ String params = "["
 "{"
 "'name':'continent',"
 "'label':'Kontinent',"
-"'type':" + String(INPUTSELECT) + ","
+"'type':" OPTION_INPUTSELECT ","
 "'options':["
 "{'v':'EU','l':'Europa'},"
 "{'v':'AF','l':'Afrika'},"
@@ -93,7 +91,7 @@ String params = "["
 "{"
 "'name':'wochentag',"
 "'label':'Wochentag',"
-"'type':" + String(INPUTMULTICHECK) + ","
+"'type':" OPTION_INPUTMULTICHECK ","
 "'options':["
 "{'v':'0','l':'Sonntag'},"
 "{'v':'1','l':'Montag'},"
@@ -132,13 +130,13 @@ boolean initWiFi() {
   }
   if (!connected) {
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(conf.getApName(), "", 1);
+    WiFi.softAP(conf.getDeviceName(), "", 1);
   }
   return connected;
 }
 
 void handleRoot() {
-  conf.handleFormRequest(&server);
+  conf.handleRoot();
   if (server.hasArg("SAVE")) {
     uint8_t cnt = conf.getCount();
     Serial.println("*********** Konfiguration ************");
@@ -148,7 +146,7 @@ void handleRoot() {
       Serial.println(conf.values[i]);
     }
     if (conf.getBool("switch")) {
-      Serial.printf("%s %s %i %5.2f \n",conf.getValue("ssid"),conf.getString("continent").c_str(),conf.getInt("amount"),conf.getFloat("float"));
+      Serial.printf("%s %s %i %5.2f \n", conf.getValue("ssid"), conf.getString("continent").c_str(), conf.getInt("amount"), conf.getFloat("float"));
     }
   }
 }
@@ -156,11 +154,11 @@ void handleRoot() {
 void setup() {
   Serial.begin(74880);
   Serial.println(params);
-  conf.setDescription(params);
+  conf.setDescription(params, &server);
   conf.readConfig();
   initWiFi();
   char dns[30];
-  sprintf(dns, "%s.local", conf.getApName());
+  sprintf(dns, "%s.local", conf.getDeviceName());
   if (MDNS.begin(dns)) {
     Serial.println("MDNS responder gestartet");
   }
