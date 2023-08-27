@@ -36,6 +36,7 @@ Dependencies:
 
 //character limits
 #define NAMELENGTH 20
+#define NVS_NAMELENGTH 15
 #define LABELLENGTH 40
 
 //name for the config file
@@ -157,7 +158,7 @@ class WebConfig {
   const boolean isNVS;
   char _buf[1000];
   WebServer* _server{ nullptr };
-  uint8_t _count;
+  uint8_t Staticindex;
   String _deviceNAme;
   String nameSpace;
   uint8_t _buttons = BTN_CONFIG;
